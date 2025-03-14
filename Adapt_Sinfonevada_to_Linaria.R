@@ -47,7 +47,6 @@ visitas <- tibble(
 write.csv(visitas, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/visitas.csv", row.names = FALSE)
 
 #### geo ####
-# id	nombre	transecto_padre	n_tramo	longitud_m	min_altitud	max_altitud	habitat	protocolo_id	geom	activo	instrumentacion	orientacion	observaciones
 dicc_parcelas_sf <- st_as_sf(dicc_parcelas, coords = c("coord_x", "coord_y"), crs = 23030) %>% 
   st_transform(4326) %>% 
   select(cod_parcela)
@@ -74,3 +73,17 @@ geo <- tibble(
 )
 
 write.csv(geo, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/geo.csv", row.names = FALSE)
+
+
+#### geo_aux ####
+# habrá que completarla cuando se sepa que variables no han entrando en otras tablas
+geo_aux <- tibble(
+  .rows = nrow(dicc_parcelas),
+  id = NA,
+  geo_id = dicc_parcelas$cod_parcela,
+  variable = NA,
+  valor = NA
+)
+
+# write.csv(geo_aux, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/geo_aux.csv", row.names = FALSE)
+
