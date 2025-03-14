@@ -54,4 +54,4 @@ alturas_v2 <- read.xlsx("H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/dicc
 alturas_v2_fixed <- alturas_v2 %>% 
   left_join(altura, by = c("cod_parcela", "cod_tipo_sp", "cod_cepa_tipo"))
 
-write.xlsx(alturas_v2_fixed, "H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/alturas_cepa_tipo_fixed.xlsx")
+write.xlsx(alturas_v2_fixed, "H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/Corrected_alturas_cepa_tipo.xlsx")
