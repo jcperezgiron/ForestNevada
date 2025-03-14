@@ -3,7 +3,7 @@
 # Load libraries
 library(tidyverse)
 library(openxlsx)
-
+library(sf)
 # Visitas
 
 dicc_parcelas <- read.csv("C:/SCIENCE/2025_UGR_Biod22/Sinfonevada_csvs/diccionarios_sf_v2.xlsx - dicc_parcelas.csv", na.strings = "")
@@ -22,9 +22,7 @@ dicc_parcelas <- dicc_parcelas %>%
 
 glimpse(dicc_parcelas)
 
-# id	validated_by	created_by	geo_id	fecha_inicio	observador_1_id	observador_2_id	dicc_viento_id	temperatura	dicc_nubes_id	
-# observaciones	created_at	updated_at	ptf	protocolo_id	fecha_fin	longitud
-
+#### visitas ####
 visitas <- tibble(
   .rows = nrow(dicc_parcelas),
   id = NA,
@@ -45,3 +43,34 @@ visitas <- tibble(
   fecha_fin = dicc_parcelas$fecha_fin,
   longitud = dicc_parcelas$longitud
 )
+
+write.csv(visitas, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/visitas.csv", row.names = FALSE)
+
+#### geo ####
+# id	nombre	transecto_padre	n_tramo	longitud_m	min_altitud	max_altitud	habitat	protocolo_id	geom	activo	instrumentacion	orientacion	observaciones
+dicc_parcelas_sf <- st_as_sf(dicc_parcelas, coords = c("coord_x", "coord_y"), crs = 23030) %>% 
+  st_transform(4326) %>% 
+  select(cod_parcela)
+
+st_write(dicc_parcelas_sf, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/geo.geojson")
+
+geo <- tibble(
+  .rows = nrow(dicc_parcelas),
+  id = dicc_parcelas$cod_parcela,
+  nombre = dicc_parcelas$cod_parcela,
+  transecto_padre = NA,
+  n_tramo = NA,
+  longitud_m = NA,
+  min_altitud = dicc_parcelas$elevacion,
+  max_altitud = dicc_parcelas$elevacion,
+  habitat = NA,
+  protocolo_id = NA,
+  geom_x = st_coordinates(dicc_parcelas_sf)[,1],
+  geom_y = st_coordinates(dicc_parcelas_sf)[,2],
+  activo = TRUE,
+  instrumentacion = NA,
+  orientacion = dicc_parcelas$orientacion,
+  observaciones = NA
+)
+
+write.csv(geo, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/geo.csv", row.names = FALSE)
