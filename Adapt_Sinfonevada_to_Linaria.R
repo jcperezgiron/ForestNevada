@@ -4,9 +4,17 @@
 library(tidyverse)
 library(openxlsx)
 library(sf)
+
+#### Parámetros generales que se pueden cambiar ####
+protocolo = 68
+
+
+
+##################
+
 # Visitas
 
-dicc_parcelas <- read.csv("C:/SCIENCE/2025_UGR_Biod22/Sinfonevada_csvs/diccionarios_sf_v2.xlsx - dicc_parcelas.csv", na.strings = "")
+dicc_parcelas <- read.csv("H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/Sinfonevada_csvs/diccionarios_sf_v2.xlsx - dicc_parcelas.csv", na.strings = "")
 
 dicc_parcelas <- dicc_parcelas %>%
   # fill hora_inicio and hora_fin with 00:00:00 when missing
@@ -15,9 +23,20 @@ dicc_parcelas <- dicc_parcelas %>%
                                  .default = hora_inicio),
          hora_fin = case_when(is.na(hora_fin) ~ hora_inicio,
                               .default = hora_fin)) %>% 
+  # Genero un campo de observaciones para indicar que se ha corregido el año en los casos en que el año no es 2004 (fecha del muestreo) y rellenar las fechas vacías con 01/01/2004
+  mutate(fecha = as_date(fecha, format = "%d/%m/%Y"),
+         obs = case_when(year(fecha) != 2004 ~ "Se ha corregido el año, pues no coincidía con la fecha de realización del inventario",
+                         is.na(fecha) ~ "Fecha no proporcionada, se ha rellenado con 01/01/2004",
+                         TRUE ~ NA_character_)) %>% 
+  # Convertir fechas y corregir años manteniendo el día y mes cuando el año no es 2004
+  mutate(fecha = case_when(
+    !is.na(fecha) & year(fecha) != 2004 ~ as_date(paste0("2004-", month(fecha), "-", day(fecha))), 
+    is.na(fecha) ~ as_date("2004-01-01"), 
+    TRUE ~ fecha)) %>% 
   # create fecha_inicio and fecha_fin as datetime columns
-  mutate(fecha_inicio = as_datetime(paste0(fecha, " ", hora_inicio), format = "%d/%m/%Y %H:%M:%S"),
-         fecha_fin = as_datetime(paste0(fecha, " ", hora_fin), format = "%d/%m/%Y %H:%M:%S"))
+  mutate(fecha_inicio = as_datetime(paste0(fecha, " ", hora_inicio), format = "%Y-%m-%d %H:%M:%S"),
+         fecha_fin = as_datetime(paste0(fecha, " ", hora_fin), format = "%Y-%m-%d %H:%M:%S"))
+  
 
 
 glimpse(dicc_parcelas)
@@ -25,7 +44,7 @@ glimpse(dicc_parcelas)
 #### visitas ####
 visitas <- tibble(
   .rows = nrow(dicc_parcelas),
-  id = NA,
+  id = 1:nrow(dicc_parcelas),
   validated_by = NA,
   created_by = NA,
   geo_id = dicc_parcelas$cod_parcela,
@@ -38,21 +57,18 @@ visitas <- tibble(
   observaciones = NA,
   created_at = NA,
   updated_at = NA,
-  ptf = NA,
-  protocolo_id = NA,
+  protocolo_id = protocolo,
+  ptf = paste(protocolo_id, geo_id, format(fecha_inicio, "%Y%m%d"), sep = "-"), #generar protocolo/geo_id/fecha
   fecha_fin = dicc_parcelas$fecha_fin,
-  longitud = dicc_parcelas$longitud
-)
+  longitud = NA
+) %>% 
+  select(id:updated_at, ptf, protocolo_id, fecha_fin, longitud)
 
-write.csv(visitas, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/visitas.csv", row.names = FALSE)
+write.csv(visitas, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/Output_csv/visitas.csv", row.names = FALSE)
 
 #### geo ####
-dicc_parcelas_sf <- st_as_sf(dicc_parcelas, coords = c("coord_x", "coord_y"), crs = 23030) %>% 
-  st_transform(4326) %>% 
-  select(cod_parcela)
 
-st_write(dicc_parcelas_sf, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/geo.geojson")
-
+# convertir a shapefile
 geo <- tibble(
   .rows = nrow(dicc_parcelas),
   id = dicc_parcelas$cod_parcela,
@@ -63,27 +79,79 @@ geo <- tibble(
   min_altitud = dicc_parcelas$elevacion,
   max_altitud = dicc_parcelas$elevacion,
   habitat = NA,
-  protocolo_id = NA,
-  geom_x = st_coordinates(dicc_parcelas_sf)[,1],
-  geom_y = st_coordinates(dicc_parcelas_sf)[,2],
+  protocolo_id = protocolo,
+  geom_x = dicc_parcelas$coord_x,
+  geom_y = dicc_parcelas$coord_y,
   activo = TRUE,
   instrumentacion = NA,
   orientacion = dicc_parcelas$orientacion,
   observaciones = NA
-)
+) %>% 
+  st_as_sf(coords = c("geom_x", "geom_y"), crs = 23030) %>% 
+  st_transform(4326)
 
-write.csv(geo, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/geo.csv", row.names = FALSE)
+st_write(geo, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/Output_csv/geo.shp")
 
 
 #### geo_aux ####
-# habrá que completarla cuando se sepa que variables no han entrando en otras tablas
-geo_aux <- tibble(
-  .rows = nrow(dicc_parcelas),
-  id = NA,
-  geo_id = dicc_parcelas$cod_parcela,
-  variable = NA,
-  valor = NA
-)
+# Leo los diccionarios necesarios
+municipios <- read.xlsx("H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/diccionarios_sf_v2.xlsx", sheet = "dicc_municipios", fillMergedCells = T, check.names = T) %>% 
+  select(nombre_municipio, cod_municipio_sf) %>% 
+  mutate(nombre_municipio = str_trim(nombre_municipio))
 
-# write.csv(geo_aux, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/geo_aux.csv", row.names = FALSE)
+coberturas <- read.xlsx("H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/diccionarios_sf_v2.xlsx", sheet = "dicc_fcc", fillMergedCells = T, check.names = T)
+montes <- read.xlsx("H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/diccionarios_sf_v2.xlsx", sheet = "dicc_montes", fillMergedCells = T, check.names = T) %>% 
+  mutate(nombre_monte = str_trim(nombre_monte),
+         cod_monte = as.integer(cod_monte))
+
+pedregosidad <- read.xlsx("H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/diccionarios_sf_v2.xlsx", sheet = "dicc_cod_pedregosidad", fillMergedCells = T, check.names = T) %>% 
+  mutate(cod_pedregosidad = as.character(cod_pedregosidad))
+
+clase_de_suelo <- read.xlsx("H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/diccionarios_sf_v2.xlsx", sheet = "dicc_cod_clase_suelo", fillMergedCells = T, check.names = T) %>% 
+  mutate(cod_clase_suelo = as.character(cod_clase_suelo))
+
+espesor_capa_muerta <- read.xlsx("H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/diccionarios_sf_v2.xlsx", sheet = "dicc_cod_espesor_capa_muerta", fillMergedCells = T, check.names = T) %>% 
+  mutate(cod_espesor_capa_muerta = as.character(cod_espesor_capa_muerta))
+
+cobertura_suelo <- read.xlsx("H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/diccionarios_sf_v2.xlsx", sheet = "dicc_cod_cobertura_suelo", fillMergedCells = T, check.names = T)
+
+geo_aux <- dicc_parcelas %>% 
+  select(cod_parcela, cod_estrato, provincia:monte, cobertura_total:pendiente, cod_pedregosidad:cod_cobertura_suelo) %>% 
+  mutate(provincia = case_when(provincia == 1 ~ "Granada",
+                               provincia == 2 ~ "Almería",
+                               .default = NA_character_),
+  ) %>% 
+  left_join(municipios, by = c("municipio" = "cod_municipio_sf")) %>%
+  select(-municipio) %>%
+  left_join(coberturas, by = c("cobertura_total" = "cod_fcc")) %>%
+  select(-cobertura_total) %>%
+  rename(cobertura_total = fcc) %>%
+  left_join(coberturas, by = c("fcc_arborea" = "cod_fcc")) %>%
+  select(-fcc_arborea) %>%
+  rename(fcc_arborea = fcc) %>%
+  left_join(coberturas, by = c("fcc_arbustiva" = "cod_fcc")) %>%
+  select(-fcc_arbustiva) %>%
+  rename(fcc_arbustiva = fcc) %>%
+  left_join(coberturas, by = c("fcc_herbacea" = "cod_fcc")) %>%
+  select(-fcc_herbacea) %>%
+  rename(fcc_herbacea = fcc) %>% 
+  left_join(montes, by = c("monte" = "cod_monte")) %>%
+  select(-monte) %>%
+  rename(monte = nombre_monte) %>%
+  left_join(pedregosidad, by = c("cod_pedregosidad" = "cod_pedregosidad")) %>%
+  select(-cod_pedregosidad) %>%
+  left_join(clase_de_suelo, by = c("cod_clase_suelo" = "cod_clase_suelo")) %>%
+  select(-cod_clase_suelo) %>%
+  left_join(espesor_capa_muerta, by = c("cod_espesor_capa_muerta" = "cod_espesor_capa_muerta")) %>%
+  select(-cod_espesor_capa_muerta) %>%
+  left_join(cobertura_suelo, by = c("cod_cobertura_suelo" = "cod_cobertura_suelo")) %>% 
+  select(-cod_cobertura_suelo) %>% 
+  rename(geo_id = cod_parcela) %>%
+  mutate_all(as.character) %>% 
+  pivot_longer(cols = -c(geo_id), names_to = "variable", values_to = "valor") %>% 
+  drop_na(valor) %>% 
+  mutate(id = 1:nrow(.)) %>% 
+  select(id, geo_id, variable, valor)
+
+write.csv(geo_aux, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/Output_csv/geo_aux.csv", row.names = FALSE)
 
