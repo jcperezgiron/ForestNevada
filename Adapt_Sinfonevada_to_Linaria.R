@@ -116,36 +116,17 @@ espesor_capa_muerta <- read.xlsx("H:/Mi unidad/ForestNevada/datos_brutos/sinfone
 cobertura_suelo <- read.xlsx("H:/Mi unidad/ForestNevada/datos_brutos/sinfonevada/diccionarios_sf_v2.xlsx", sheet = "dicc_cod_cobertura_suelo", fillMergedCells = T, check.names = T)
 
 geo_aux <- dicc_parcelas %>% 
-  select(cod_parcela, cod_estrato, provincia:monte, cobertura_total:pendiente, cod_pedregosidad:cod_cobertura_suelo) %>% 
+  select(cod_parcela, provincia:monte, pendiente) %>% 
   mutate(provincia = case_when(provincia == 1 ~ "Granada",
                                provincia == 2 ~ "Almería",
                                .default = NA_character_),
   ) %>% 
   left_join(municipios, by = c("municipio" = "cod_municipio_sf")) %>%
   select(-municipio) %>%
-  left_join(coberturas, by = c("cobertura_total" = "cod_fcc")) %>%
-  select(-cobertura_total) %>%
-  rename(cobertura_total = fcc) %>%
-  left_join(coberturas, by = c("fcc_arborea" = "cod_fcc")) %>%
-  select(-fcc_arborea) %>%
-  rename(fcc_arborea = fcc) %>%
-  left_join(coberturas, by = c("fcc_arbustiva" = "cod_fcc")) %>%
-  select(-fcc_arbustiva) %>%
-  rename(fcc_arbustiva = fcc) %>%
-  left_join(coberturas, by = c("fcc_herbacea" = "cod_fcc")) %>%
-  select(-fcc_herbacea) %>%
-  rename(fcc_herbacea = fcc) %>% 
   left_join(montes, by = c("monte" = "cod_monte")) %>%
   select(-monte) %>%
   rename(monte = nombre_monte) %>%
-  left_join(pedregosidad, by = c("cod_pedregosidad" = "cod_pedregosidad")) %>%
-  select(-cod_pedregosidad) %>%
-  left_join(clase_de_suelo, by = c("cod_clase_suelo" = "cod_clase_suelo")) %>%
-  select(-cod_clase_suelo) %>%
-  left_join(espesor_capa_muerta, by = c("cod_espesor_capa_muerta" = "cod_espesor_capa_muerta")) %>%
-  select(-cod_espesor_capa_muerta) %>%
-  left_join(cobertura_suelo, by = c("cod_cobertura_suelo" = "cod_cobertura_suelo")) %>% 
-  select(-cod_cobertura_suelo) %>% 
+
   rename(geo_id = cod_parcela) %>%
   mutate_all(as.character) %>% 
   pivot_longer(cols = -c(geo_id), names_to = "variable", values_to = "valor") %>% 
