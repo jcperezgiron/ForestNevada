@@ -1,0 +1,102 @@
+---
+title: "Get format - Pinares"
+author: "José Carlos"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    css: styles.css
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    theme: simplex
+    highlight: tango
+    df_print: kable
+    code_folding: "hide"
+    keep_md: no
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Packages
+library(sf)
+library(tidyverse)
+
+
+
+# Directories
+dir_pinares_dasometrico <- "H:/Mi unidad/ForestNevada/otras_bbdd_linaria/pinares_dasometrico"
+dir_pinares_regeneracion <- "H:/Mi unidad/ForestNevada/otras_bbdd_linaria/pinares_regeneracion"
+```
+
+
+```{r functions, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+
+
+```
+
+
+
+# Plot table
+
+```{r plot_table, echo=FALSE, message=FALSE, warning=FALSE, out.width = "100%"}
+# List files in the directory
+files_in_dasometrico <- list.files(dir_pinares_dasometrico, full.names = TRUE, pattern = ".csv")
+
+# Load the data from visitas
+visitas <- read.csv(files_in_dasometrico[grepl("visitas", files_in_dasometrico)]) %>% 
+  dplyr::select(geo_id, fecha_inicio) %>% 
+  mutate(fecha_inicio = as.Date(fecha_inicio, format = "%Y-%m-%d"))
+
+# Load the data from geo
+geo <- read.csv(files_in_dasometrico[grepl("geo.csv", files_in_dasometrico)], na.strings = "NULL") %>%
+  dplyr::select(id, nombre, transecto_padre, min_altitud, max_altitud, geom)
+  # rowwise() %>%
+  # mutate(geom_sf = if (!is.na(geom)) st_as_sfc(structure(list(geom), class = "WKB"), EWKB = TRUE) else NA) %>%
+  # ungroup()
+
+geo_aux <- read.csv(files_in_dasometrico[grepl("geo_aux.csv", files_in_dasometrico)], na.strings = "NULL") %>% 
+  select(-id) %>% 
+  filter(variable %in% c("orientacion", "pendiente_media")) %>% 
+  pivot_wider(
+    names_from = variable,
+    values_from = valor
+  ) 
+
+plot_table <- visitas %>% 
+  # Join tables
+  left_join(geo, by = c("geo_id" = "id")) %>% 
+  left_join(geo_aux, by = "geo_id") %>% 
+  filter(is.na(transecto_padre)) %>%
+  # Rename columns of interest
+  rename(
+    date = fecha_inicio,
+    plot = nombre,
+    aspect = orientacion,
+    slope = pendiente_media
+  ) %>%
+  # Compute new columns
+  mutate(
+    id_unique_code = paste("PI", plot, format(date, "%Y%m%d"), sep = "-"),
+    elevation = mean(c(min_altitud, max_altitud), na.rm = TRUE),
+    shape = "Square plots of 50x50 metres",
+    area = 2500,
+    database = "Pinares"
+  ) %>% 
+  # Order and select columns
+  select(id_unique_code, plot, date, geom, elevation, aspect, slope, shape, area, database)
+
+
+# check duplicates in id_unique_code
+plot_table %>% 
+  group_by(id_unique_code) %>% 
+  summarise(n = n()) %>% 
+  filter(n > 1) %>% 
+  ungroup() %>% 
+  arrange(desc(n))
+
+```
