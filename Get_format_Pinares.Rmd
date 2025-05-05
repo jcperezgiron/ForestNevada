@@ -33,44 +33,40 @@ dir_pinares_regeneracion <- "H:/Mi unidad/ForestNevada/otras_bbdd_linaria/pinare
 
 
 ```{r functions, echo=FALSE, message=FALSE, warning=FALSE}
-
-
-
-
 ```
 
 
 
-# Plot table
+# Plot
 
 ```{r plot_table, echo=FALSE, message=FALSE, warning=FALSE, out.width = "100%"}
 # List files in the directory
 files_in_dasometrico <- list.files(dir_pinares_dasometrico, full.names = TRUE, pattern = ".csv")
 
 # Load the data from visitas
-visitas <- read.csv(files_in_dasometrico[grepl("visitas", files_in_dasometrico)]) %>% 
-  dplyr::select(geo_id, fecha_inicio) %>% 
+visitas <- read.csv(files_in_dasometrico[grepl("visitas", files_in_dasometrico)]) %>%
+  dplyr::select(id, geo_id, fecha_inicio) %>%
   mutate(fecha_inicio = as.Date(fecha_inicio, format = "%Y-%m-%d"))
 
 # Load the data from geo
 geo <- read.csv(files_in_dasometrico[grepl("geo.csv", files_in_dasometrico)], na.strings = "NULL") %>%
   dplyr::select(id, nombre, transecto_padre, min_altitud, max_altitud, geom)
-  # rowwise() %>%
-  # mutate(geom_sf = if (!is.na(geom)) st_as_sfc(structure(list(geom), class = "WKB"), EWKB = TRUE) else NA) %>%
-  # ungroup()
+# rowwise() %>%
+# mutate(geom_sf = if (!is.na(geom)) st_as_sfc(structure(list(geom), class = "WKB"), EWKB = TRUE) else NA) %>%
+# ungroup()
 
-geo_aux <- read.csv(files_in_dasometrico[grepl("geo_aux.csv", files_in_dasometrico)], na.strings = "NULL") %>% 
-  select(-id) %>% 
-  filter(variable %in% c("orientacion", "pendiente_media")) %>% 
+geo_aux <- read.csv(files_in_dasometrico[grepl("geo_aux.csv", files_in_dasometrico)], na.strings = "NULL") %>%
+  select(-id) %>%
+  filter(variable %in% c("orientacion", "pendiente_media")) %>%
   pivot_wider(
     names_from = variable,
     values_from = valor
-  ) 
+  )
 
-plot_table <- visitas %>% 
+plot_table <- visitas %>%
   # Join tables
-  left_join(geo, by = c("geo_id" = "id")) %>% 
-  left_join(geo_aux, by = "geo_id") %>% 
+  left_join(geo, by = c("geo_id" = "id")) %>%
+  left_join(geo_aux, by = "geo_id") %>%
   filter(is.na(transecto_padre)) %>%
   # Rename columns of interest
   rename(
@@ -86,17 +82,169 @@ plot_table <- visitas %>%
     shape = "Square plots of 50x50 metres",
     area = 2500,
     database = "Pinares"
-  ) %>% 
+  ) %>%
   # Order and select columns
-  select(id_unique_code, plot, date, geom, elevation, aspect, slope, shape, area, database)
+  select(id, id_unique_code, plot, date, geom, elevation, aspect, slope, shape, area, database)
 
 
 # check duplicates in id_unique_code
-plot_table %>% 
-  group_by(id_unique_code) %>% 
-  summarise(n = n()) %>% 
-  filter(n > 1) %>% 
-  ungroup() %>% 
+plot_table %>%
+  group_by(id_unique_code) %>%
+  summarise(n = n()) %>%
+  filter(n > 1) %>%
+  ungroup() %>%
   arrange(desc(n))
+```
+
+
+# Tree
+
+```{r tree_table, echo=FALSE, message=FALSE, warning=FALSE, out.width = "100%"}
+# List files in the directory
+files_in_dasometrico <- list.files(dir_pinares_dasometrico, full.names = TRUE, pattern = ".csv")
+
+# Load dicctionary
+dicc_taxonomico <- read.csv(files_in_dasometrico[grepl("dicc_taxonomico", files_in_dasometrico)]) %>%
+  dplyr::select(id, withoutautorship)
+
+# Load the data
+pinares_pinos_tipo <- read.csv(
+  files_in_dasometrico[grepl("pinos_tipo", files_in_dasometrico)],
+  na.strings = c("NULL", "")  # convierte "" y "NULL" a NA
+) %>%
+  dplyr::select(
+    visita_id, arbol, dicc_taxonomico_id,
+    diametro_normal_1, diametro_normal_2, altura,
+    proyeccion_copa_1, proyeccion_copa_2, fcv, hcv
+  ) %>%
+  # join with the taxonomic dictionary
+  left_join(dicc_taxonomico, by = c("dicc_taxonomico_id" = "id")) %>%
+  # compute mean averages with NA fallback
+  rowwise() %>%
+  mutate(
+    dbh = if (all(is.na(c(diametro_normal_1, diametro_normal_2)))) {
+      NA_character_
+    } else {
+      as.character(mean(c(diametro_normal_1, diametro_normal_2), na.rm = TRUE))
+    },
+    crown_diameter = if (all(is.na(c(proyeccion_copa_1, proyeccion_copa_2)))) {
+      NA_character_
+    } else {
+      as.character(mean(c(proyeccion_copa_1, proyeccion_copa_2), na.rm = TRUE) / 100)
+    }
+  ) %>%
+  ungroup() %>%
+  # rename columns
+  rename(
+    tree_id = arbol,
+    sp_code = dicc_taxonomico_id,
+    sp_name = withoutautorship,
+    height = altura,
+    live_crown_height = hcv,
+    live_crown_ratio = fcv
+  ) %>%
+  # reclassify live_crown_ratio
+  mutate(live_crown_ratio = case_when(
+    live_crown_ratio == "1/3 < (Fcv) < 2/3" ~ "1/3 < X < 2/3",
+    live_crown_ratio == "(Fcv) < 1/3" ~ "X < 1/3",
+    live_crown_ratio == "2/3 < (Fcv) < 1" ~ "2/3 < X < 1",
+    .default = NA_character_
+  )) %>%
+  # Select final columns
+  dplyr::select(
+    visita_id, tree_id, sp_code, sp_name,
+    dbh, height, crown_diameter, live_crown_height, live_crown_ratio
+  ) %>% 
+  # convert to numeric
+  mutate(
+    dbh = as.numeric(dbh),
+    height = as.numeric(height),
+    crown_diameter = as.numeric(crown_diameter),
+    live_crown_height = as.numeric(live_crown_height)
+  )
+
+pinares_pinos_dasometrico <- read.csv(files_in_dasometrico[grepl("pinos_dasometrico", files_in_dasometrico)],
+                                        na.strings = c("NULL", "")) %>%   # convierte "" y "NULL" a NA
+  dplyr::select(visita_id, dicc_taxonomico_id, diametro_normal_1, diametro_normal_2) %>%
+  # join with the taxonomic dictionary
+  left_join(dicc_taxonomico, by = c("dicc_taxonomico_id" = "id")) %>%
+  # compute mean averages with NA fallback
+  rowwise() %>%
+  mutate(
+    dbh = if (all(is.na(c(diametro_normal_1, diametro_normal_2)))) {
+      NA_character_
+    } else {
+      as.character(mean(c(diametro_normal_1, diametro_normal_2), na.rm = TRUE))
+    }
+  ) %>%
+  ungroup() %>%
+  # rename columns
+rename(
+    sp_code = dicc_taxonomico_id,
+    sp_name = withoutautorship,
+  ) %>% 
+  # Select final columns
+  dplyr::select(visita_id, sp_code, sp_name, dbh) %>%
+  # convert to numeric
+  mutate(
+    dbh = as.numeric(dbh)
+  )
+  
+  
+pinares_monte_alto <- read.csv(files_in_dasometrico[grepl("monte_alto", files_in_dasometrico)],
+                               na.strings = c("NULL", "")) %>%   # convierte "" y "NULL" a NA
+  dplyr::select(visita_id, numero_ejemplar, dicc_taxonomico_id, diametro_normal_1, diametro_normal_2, altura, proyeccion_copa_1, proyeccion_copa_2) %>%
+  # join with the taxonomic dictionary
+  left_join(dicc_taxonomico, by = c("dicc_taxonomico_id" = "id")) %>%
+  # compute mean averages with NA fallback
+  rowwise() %>%
+  mutate(
+    dbh = if (all(is.na(c(diametro_normal_1, diametro_normal_2)))) {
+      NA_character_
+    } else {
+      as.character(mean(c(diametro_normal_1, diametro_normal_2), na.rm = TRUE))
+    },
+    crown_diameter = if (all(is.na(c(proyeccion_copa_1, proyeccion_copa_2)))) {
+      NA_character_
+    } else {
+      as.character(mean(c(proyeccion_copa_1, proyeccion_copa_2), na.rm = TRUE) / 100)
+    }
+  ) %>%
+  ungroup() %>%
+  # rename columns
+  rename(
+    tree_id = numero_ejemplar,
+    sp_code = dicc_taxonomico_id,
+    sp_name = withoutautorship,
+    height = altura
+  ) %>%
+  # Select final columns
+  dplyr::select(
+    visita_id, tree_id, sp_code, sp_name,
+    dbh, height, crown_diameter
+  ) %>% 
+  # convert to numeric
+  mutate(
+    tree_id = as.numeric(tree_id)+1000, # to avoid duplicates with pinos_tipo
+    dbh = as.numeric(dbh),
+    height = as.numeric(height),
+    crown_diameter = as.numeric(crown_diameter)
+  )
+
+# Combine all dataframes
+tree_table <- bind_rows(pinares_pinos_tipo, pinares_pinos_dasometrico, pinares_monte_alto) %>%
+  # Join with the plot table
+  left_join(plot_table %>% dplyr::select(id, id_unique_code), by = c("visita_id" = "id")) %>%
+  # Select final columns
+  dplyr::select(
+    id_unique_code, everything()
+  ) %>%
+  # pivot longer to variable- value format
+  mutate_all(as.character) %>%
+  pivot_longer(
+    cols = c(dbh, height, crown_diameter, live_crown_height, live_crown_ratio),
+    names_to = "variable",
+    values_to = "value"
+  )
 
 ```
