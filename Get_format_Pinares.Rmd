@@ -248,3 +248,49 @@ tree_table <- bind_rows(pinares_pinos_tipo, pinares_pinos_dasometrico, pinares_m
   )
 
 ```
+
+
+# Understory
+
+```{r understory_table, echo=FALSE, message=FALSE, warning=FALSE, out.width = "100%"}
+# List files in the directory
+files_in_regeracion <- list.files(dir_pinares_regeneracion, full.names = TRUE, pattern = ".csv")
+
+pinares_comunidades <- read.csv(files_in_regeracion[grepl("comunidades", files_in_regeracion)],
+                                        na.strings = c("NULL", "")) %>%   # convierte "" y "NULL" a NA
+  dplyr::select(visita_id, dicc_taxonomico_id, porcentaje_cobertura) %>%
+  # join with the taxonomic dictionary
+  left_join(dicc_taxonomico, by = c("dicc_taxonomico_id" = "id")) %>%
+  # rename columns
+  rename(
+    sp_code = dicc_taxonomico_id,
+    sp_name = withoutautorship,
+    cover = porcentaje_cobertura
+  ) %>%
+  # Select final columns
+  dplyr::select(visita_id, sp_code, sp_name, cover) %>%
+  # convert to numeric and correct values higher than 100
+  mutate(
+    cover = as.numeric(cover),
+    cover = ifelse(cover > 100, 100, cover)
+  )
+
+pinares_regeneracion <- read.csv(files_in_regeracion[grepl("pinares_regeneracion.csv", files_in_regeracion)],
+                                        na.strings = c("NULL", "")) %>%   # convierte "" y "NULL" a NA
+  dplyr::select(visita_id, dicc_taxonomico_id, cobertura, altura_media, numero_ejemplares) %>%
+  # join with the taxonomic dictionary
+  left_join(dicc_taxonomico, by = c("dicc_taxonomico_id" = "id")) %>%
+  # rename columns
+  rename(
+    sp_code = dicc_taxonomico_id,
+    sp_name = withoutautorship,
+    cover = cobertura,
+    n = numero_ejemplares,
+  ) %>%
+  # Select final columns
+  dplyr::select(visita_id, sp_code, sp_name, cover, altura_media, n) %>% 
+  # remove species included in the tree table
+  filter(!(sp_code %in% tree_table$sp_code))
+
+
+```
