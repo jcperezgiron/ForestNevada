@@ -88,12 +88,17 @@ plot_table <- visitas %>%
 
 
 # check duplicates in id_unique_code
-plot_table %>%
+duplicados <- plot_table %>%
   group_by(id_unique_code) %>%
   summarise(n = n()) %>%
   filter(n > 1) %>%
   ungroup() %>%
   arrange(desc(n))
+
+duplicados <- plot_table %>% 
+  filter(id_unique_code %in% duplicados$id_unique_code) %>% 
+  dplyr::select(id, plot, date) %>% 
+  arrange(desc(plot))
 ```
 
 
