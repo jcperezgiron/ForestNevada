@@ -136,3 +136,38 @@ geo_aux <- dicc_parcelas %>%
 
 write.csv(geo_aux, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/Output_csv/geo_aux.csv", row.names = FALSE)
 
+
+#### visitas_aux ####
+# Crear diccionario como vector nombrado
+dicc_fcc <- setNames(coberturas$fcc, coberturas$cod_fcc)
+dicc_pedregosidad <- setNames(pedregosidad$pedregosidad, pedregosidad$cod_pedregosidad)
+dicc_clase_de_suelo <- setNames(clase_de_suelo$clase_suelo, clase_de_suelo$cod_clase_suelo)
+dicc_espesor_capa_muerta <- setNames(espesor_capa_muerta$espesor_capa_muerta, espesor_capa_muerta$cod_espesor_capa_muerta)
+dicc_cobertura_suelo <- setNames(cobertura_suelo$cobertura_suelo, cobertura_suelo$cod_cobertura_suelo)
+
+visitas_aux <- dicc_parcelas %>% 
+  dplyr::select(cod_parcela, cod_estrato, cobertura_total, fcc_arborea, fcc_arbustiva, 
+         fcc_herbacea, cod_pedregosidad, cod_clase_suelo, cod_espesor_capa_muerta, cod_cobertura_suelo) %>% 
+  mutate(
+    cobertura_total = recode(cobertura_total, !!!dicc_fcc),
+    fcc_arborea = recode(fcc_arborea, !!!dicc_fcc),
+    fcc_arbustiva = recode(fcc_arbustiva, !!!dicc_fcc),
+    fcc_herbacea = recode(fcc_herbacea, !!!dicc_fcc),
+    pedregosidad = recode(cod_pedregosidad, !!!dicc_pedregosidad),
+    clase_de_suelo = recode(cod_clase_suelo, !!!dicc_clase_de_suelo),
+    espesor_capa_muerta = recode(cod_espesor_capa_muerta, !!!dicc_espesor_capa_muerta),
+    cobertura_suelo = recode(cod_cobertura_suelo, !!!dicc_cobertura_suelo)
+  ) %>% 
+  dplyr::select(cod_parcela, cod_estrato, cobertura_total, fcc_arborea, fcc_arbustiva, 
+                fcc_herbacea, pedregosidad, clase_de_suelo, espesor_capa_muerta, cobertura_suelo) %>% 
+  rename(geo_id = cod_parcela) %>%
+  mutate_all(as.character) %>% 
+  pivot_longer(cols = -c(geo_id), names_to = "variable", values_to = "valor") %>% 
+  drop_na(valor) %>% 
+  select(geo_id, variable, valor) %>% 
+  left_join(visitas %>% dplyr::select(id, geo_id), by = "geo_id") %>% 
+  mutate(visita_id = NA) %>% 
+  dplyr::select(id, visita_id, variable, valor)
+
+
+write.csv(visitas_aux, "H:/Mi unidad/ForestNevada/Sinfonevada_to_Linaria/Output_csv/visitas_aux.csv", row.names = FALSE)
